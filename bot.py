@@ -11,6 +11,7 @@ from loader import scheduler
 
 
 list_num = []
+list_new = []
 ua = UserAgent()
 router = Router()
 
@@ -79,60 +80,99 @@ async def cat_num(message: Message, state: FSMContext):
     tarif_phone = data['tarif']
     maska_phone = data['maska_num']
     cat_phone = data['categories']
-    flag = True
-    # await state.clear()
+    dict_cat = {
+        'gold': 'gold',
+        'brilliant': 'brilliant,brilliant_super',
+        'platinum': 'platinum,platinum_lite',
+        'silver': 'silver,silver_special,silver_special_2',
+        'bronze': 'ordinary,bronze,bronze_vip,bronze+AAA',
+        '': ''
+    }
+    cat_phone = dict_cat[cat_phone]
     await message.answer("Приступаю к поиску!", reply_markup=cancel)
-    await search(message, tarif_phone, maska_phone, cat_phone, flag)
-    scheduler.add_job(search, "interval", seconds=5, args=(message, tarif_phone, maska_phone, cat_phone, flag))
+    await base_set(tarif_phone, maska_phone, cat_phone)
+    await search(message, tarif_phone, maska_phone, cat_phone)
+    scheduler.add_job(search, "interval", seconds=2, args=(message, tarif_phone, maska_phone, cat_phone))
 
 
-async def search(message, tarif_phone, maska_phone, cat_phone, flag):
+async def base_set(tarif_phone, maska_phone, cat_phone):
 
-    while flag:
+    headers = {'User-agent': ua.random}
+    session = requests.Session()
+    session.headers.update(headers)
 
-        await asyncio.sleep(1)
-        headers = {'User-agent': ua.random}
-        session = requests.Session()
-        session.headers.update(headers)
-        res_rooms = session.get('https://api.store.bezlimit.ru/v2/super-link/phones/mask-category?service_limit=590&group_by=mask-category&expand=tariff,region&per_page=25')
-        # res_rooms = session.get(
-        #     f'https://www.anncom.ru/dialer/lendingbezlimit/main.py?tariff={tarif_phone}&'
-        #     f'phone_pattern={maska_phone}&region=&pattern=categories&phone_categories={cat_phone}&pageLimit=1000'
-        # )
+    res_num = session.get(
+        f"https://api.store.bezlimit.ru/v2/super-link/phones/mask-category?mask-category={cat_phone}&service_limit={tarif_phone}&"
+        f"group_by=mask-category&expand=tariff,region&per_page=200")  # bezlimit
 
-        dict_num = res_rooms.json()
-        print(dict_num)
-        print(dict_num['ordinary,bronze,bronze_vip,bronze AAA']['items'])
+    dict_num = res_num.json()
+    # print(dict_num) # ['ordinary,bronze,bronze_vip,bronze AAA'] ['platinum,platinum_lite'] ['brilliant,brilliant_super']
 
-        for i in dict_num['ordinary,bronze,bronze_vip,bronze AAA']['items']:
-            print(i['phone'])
-            data_num = {'phone': i['phone'],
-                        'tariff_id': '13101',
-                        'type': 'store',
-                        'user_id': 480524,
-                        'filter': 'professional'
-                        }
-            tar = session.post('https://api.store.bezlimit.ru/v2/super-link/reservations?expand=tariff', data=data_num)
-            print(tar)
-            reservetion = session.options(f"https://api.store.bezlimit.ru/v2/super-link/reservations?phone={i['phone']}&user_id=480524")
-            print(reservetion)
+    for i in dict_num[cat_phone]['items']:
 
-        if dict_num['response']['message'] == 'not_found':
-            continue
+        if i['phone'] not in list_num:
+            list_num.append(i['phone'])
         else:
-            return await publication(message, dict_num)
+            continue
+    print(list_num)
+    return dict_num
+
+
+async def search(message, tarif_phone, maska_phone, cat_phone):
+
+    headers = {'User-agent': ua.random}
+    session = requests.Session()
+    session.headers.update(headers)
+
+    res_num = session.get(f"https://api.store.bezlimit.ru/v2/super-link/phones/mask-category?service_limit={tarif_phone}&"
+                            f"group_by=mask-category&expand=tariff,region&per_page=200") #bezlimit
+
+    # data_num = {
+    #     'sort': '-tariff_price',
+    #     'type': 'standard',
+    #     'service_limit': tarif_phone,
+    #     'is_reserved': 'true',
+    #     'per_page': 6,
+    #     'expand': 'reservation,tariff,region,mask,priceParams'
+    # }
+
+    # res_num = session.get(f"https://api.store.bezlimit.ru/v2/phones?sort=-tariff_price&type=standard&"
+    #                       f"service_limit={tarif_phone}&is_reserved=true&per_page=6&expand=reservation,tariff,region,mask,priceParams") #bezlimit_store
+    # res_num = session.get(
+    #     f'https://www.anncom.ru/dialer/lendingbezlimit/main.py?tariff={tarif_phone}&'
+    #     f'phone_pattern={maska_phone}&region=&pattern=categories&phone_categories={cat_phone}&pageLimit=1000'
+    # ) #bezlimit_club
+
+    dict_num = res_num.json()
+    # print(dict_num) # ['ordinary,bronze,bronze_vip,bronze AAA'] ['platinum,platinum_lite'] ['brilliant,brilliant_super']
+
+    # for i in dict_num['platinum,platinum_lite']['items']:
+    #
+    #     if i['phone'] not in list_num:
+    #         list_num.append(i['phone'])
+    #     else:
+    #         continue
+        # data_num = {'phone': i['phone'],
+        #             'tariff_id': '13101',
+        #             'type': 'store',
+        #             'user_id': 486739,
+        #             'filter': 'professional'
+        #             }
+        # tar = session.post('https://api.store.bezlimit.ru/v2/super-link/reservations?expand=tariff', data=data_num)
+        # reservetion = session.options(
+        #     f"https://api.store.bezlimit.ru/v2/super-link/reservations?phone={i['phone']}&user_id=486739") #480524
+        # await message.answer(f"Номер - {i['phone']} забронирован!")
+
+    return await publication(message, dict_num)
 
 
 async def publication(message, dict_num):
 
-    for i in dict_num['response']['items']:
+    for i in dict_num['platinum,platinum_lite']['items']:
 
         if i['phone'] not in list_num:
             list_num.append(i['phone'])
-            headers = {'User-agent': ua.random}
-            session = requests.Session()
-            session.headers.update(headers)
-            await message.answer(f"Номер - {i['phone']} забронирован!")
+            await message.answer(f"{i['phone']}")
             continue
 
         await asyncio.sleep(1)
