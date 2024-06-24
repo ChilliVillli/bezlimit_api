@@ -40,6 +40,9 @@ tarif_num = ReplyKeyboardMarkup(
             KeyboardButton(text='4000')
         ],
         [
+            KeyboardButton(text='2000+')
+        ],
+        [
             KeyboardButton(text='Пропустить')
         ]
     ],

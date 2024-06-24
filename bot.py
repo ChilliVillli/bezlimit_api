@@ -25,6 +25,7 @@ dict_cat = {
     'bronze': 'ordinary,bronze,bronze_vip,bronze+AAA',
     '': ''
 }
+count = 1
 
 
 class FiltresSearch(StatesGroup):
@@ -44,7 +45,9 @@ async def comand_start_handler(message: Message):
 async def cmd_cancel(message: Message, state: FSMContext):
 
     await state.clear()
-    await message.answer('Поиск отменен', reply_markup=menu_admin)
+    await message.answer('Поиск отменен', reply_markup=menu)
+    list_num.clear()
+    scheduler.shutdown(wait=False)
 
 
 @router.message(F.text == 'Выберите тариф')
@@ -59,7 +62,9 @@ async def tariff(message: Message, state: FSMContext):
 
     if message.text == 'Пропустить':
         await state.update_data(tarif='')
-    else:
+    if message.text == '2000+':
+        await state.update_data(tarif='2000,2500,3000,4000')
+    if message.text != 'Пропустить':
         await state.update_data(tarif=message.text)
 
     await message.answer("Введите маску - например NNNAAABBB или номер или нажмите пропустить", reply_markup=next)
@@ -93,57 +98,74 @@ async def cat_num(message: Message, state: FSMContext):
     cat_phone = dict_cat[cat_phone]
     await message.answer("Приступаю к поиску!", reply_markup=cancel)
     await base_set(tarif_phone, maska_phone, cat_phone, list_cat)
-    await search(message, tarif_phone, maska_phone, cat_phone)
     scheduler.add_job(search, "interval", seconds=2, args=(message, tarif_phone, maska_phone, cat_phone))
 
 
 async def base_set(tarif_phone, maska_phone, cat_phone, list_cat):
 
-    headers = {'User-agent': ua.random}
-    session = requests.Session()
-    session.headers.update(headers)
+    for page in range(1, 8):
 
-    res_num = session.get(
-        f"https://api.store.bezlimit.ru/v2/super-link/phones/mask-category?mask-category={cat_phone}"
-        f"&phone_pattern={maska_phone}&service_limit={tarif_phone}&group_by=mask-category&expand=tariff,region&per_page=500"
-    )  # bezlimit
+        headers = {'User-agent': ua.random}
+        session = requests.Session()
+        session.headers.update(headers)
 
-    dict_num = res_num.json()
 
-    if cat_phone not in list_cat:
+        res_num = session.get(
+            f"https://api.store.bezlimit.ru/v2/super-link/phones/mask-category?mask-category={cat_phone}"
+            f"&phone_pattern={maska_phone}&service_limit={tarif_phone}&group_by=mask-category&page={page}&"
+            f"expand=tariff,region&per_page=50"
+        )
 
-        for j in list_cat:
-            if len(dict_num[j]['items']) == 0:
-                continue
-            else:
-                for i in dict_num[j]['items']:
-                    if i['phone'] not in list_num:
-                        list_num.append(i['phone'])
-                    else:
-                        continue
+        dict_num = res_num.json()
 
-    if cat_phone in list_cat:
-        for i in dict_num[cat_phone]['items']:
-            if i['phone'] not in list_num:
-                list_num.append(i['phone'])
+        if cat_phone not in list_cat:
 
-    return dict_num
+            for j in list_cat:
+                if len(dict_num[j]['items']) == 0:
+                    continue
+                else:
+                    for i in dict_num[j]['items']:
+                        if i['phone'] not in list_num:
+                            list_num.append(i['phone'])
+                        else:
+                            continue
+
+                    print(f"{j}-{len(list_num)}")
+
+        if cat_phone in list_cat:
+            for i in dict_num[cat_phone]['items']:
+                if i['phone'] not in list_num:
+                    list_num.append(i['phone'])
+
+        print(f"All-{len(list_num)} {page}")
 
 
 async def search(message, tarif_phone, maska_phone, cat_phone):
+    global count
 
+    def page(count):
+
+        if count > 8:
+            count = 1
+            return count
+        else:
+            count += 1
+            return count
+
+    count = page(count)
     headers = {'User-agent': ua.random}
     session = requests.Session()
     session.headers.update(headers)
 
     res_num = session.get(
         f"https://api.store.bezlimit.ru/v2/super-link/phones/mask-category?mask-category={cat_phone}&"
-        f"phone_pattern={maska_phone}&service_limit={tarif_phone}&group_by=mask-category&expand=tariff,region&per_page=1500"
-    ) #bezlimit
+        f"phone_pattern={maska_phone}&service_limit={tarif_phone}&group_by=mask-category&page={count}"
+        f"&expand=tariff,region&per_page=50"
+    )
 
     dict_num = res_num.json()
 
-    """reservetion number"""
+    # """reservetion number"""
         # data_num = {'phone': i['phone'],
         #             'tariff_id': '13101',
         #             'type': 'store',
@@ -154,7 +176,8 @@ async def search(message, tarif_phone, maska_phone, cat_phone):
         # reservetion = session.options(
         #     f"https://api.store.bezlimit.ru/v2/super-link/reservations?phone={i['phone']}&user_id=486739") #480524
         # await message.answer(f"Номер - {i['phone']} забронирован!")
-    return await publication(message, dict_num, cat_phone, list_cat)
+
+    await publication(message, dict_num, cat_phone, list_cat)
 
 
 async def publication(message, dict_num, cat_phone, list_cat):
@@ -181,12 +204,3 @@ async def publication(message, dict_num, cat_phone, list_cat):
                 await asyncio.sleep(1)
             else:
                 continue
-
-    # for i in dict_num['platinum,platinum_lite']['items']:
-    #
-    #     if i['phone'] not in list_num:
-    #         list_num.append(i['phone'])
-    #         await message.answer(f"{i['phone']}")
-    #         continue
-    #
-    #     await asyncio.sleep(1)
