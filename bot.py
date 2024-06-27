@@ -25,7 +25,6 @@ dict_cat = {
     'bronze': 'ordinary,bronze,bronze_vip,bronze+AAA',
     '': ''
 }
-count = 0
 
 
 class FiltresSearch(StatesGroup):
@@ -48,6 +47,7 @@ async def cmd_cancel(message: Message, state: FSMContext):
     await message.answer('Поиск отменен', reply_markup=menu)
     list_num.clear()
     scheduler.shutdown(wait=False)
+    scheduler.start()
 
 
 @router.message(F.text == 'Выберите тариф')
@@ -98,12 +98,15 @@ async def cat_num(message: Message, state: FSMContext):
     cat_phone = dict_cat[cat_phone]
     await base_set(tarif_phone, maska_phone, cat_phone, list_cat)
     await message.answer("Приступаю к поиску!", reply_markup=cancel)
-    scheduler.add_job(search, "interval", seconds=2, args=(message, tarif_phone, maska_phone, cat_phone))
+    scheduler.add_job(publication, "interval", seconds=2, args=(message, tarif_phone, maska_phone, cat_phone, list_cat))
 
 
 async def url_page(maska_phone, tarif_phone, cat_phone):
+    page = 0
+    flag = True
 
-    for page in range(1, 6):
+    while flag:
+        page += 1
 
         headers = {'User-agent': ua.random}
         session = requests.Session()
@@ -117,7 +120,8 @@ async def url_page(maska_phone, tarif_phone, cat_phone):
 
         dict_num = res_num.json()
 
-        page_count = dict_num[cat_phone]['_meta']['pageCount']
+        if dict_num[cat_phone]['_meta']['pageCount'] < page:
+            flag = False
 
         yield dict_num
 
@@ -152,67 +156,29 @@ async def base_set(tarif_phone, maska_phone, cat_phone, list_cat):
         print(f"All-{len(list_num)}")
 
 
-async def search(message, tarif_phone, maska_phone, cat_phone):
-    global count
-
-    def page(count):
-
-        if count > 8:
-            count = 1
-            return count
-        else:
-            count += 1
-            return count
-
-    count = page(count)
-    headers = {'User-agent': ua.random}
-    session = requests.Session()
-    session.headers.update(headers)
-
-    res_num = session.get(
-        f"https://api.store.bezlimit.ru/v2/super-link/phones/mask-category?mask-category={cat_phone}&"
-        f"phone_pattern={maska_phone}&service_limit={tarif_phone}&group_by=mask-category&page={count}"
-        f"&expand=tariff,region&per_page=50"
-    )
-
-    dict_num = res_num.json()
-
-    # """reservetion number"""
-        # data_num = {'phone': i['phone'],
-        #             'tariff_id': '13101',
-        #             'type': 'store',
-        #             'user_id': 486739,
-        #             'filter': 'professional'
-        #             }
-        # tar = session.post('https://api.store.bezlimit.ru/v2/super-link/reservations?expand=tariff', data=data_num)
-        # reservetion = session.options(
-        #     f"https://api.store.bezlimit.ru/v2/super-link/reservations?phone={i['phone']}&user_id=486739") #480524
-        # await message.answer(f"Номер - {i['phone']} забронирован!")
-
-    await publication(message, dict_num, cat_phone, list_cat)
-
-
-async def publication(message, dict_num, cat_phone, list_cat):
+async def publication(message, maska_phone, tarif_phone, cat_phone, list_cat):
 
     if cat_phone not in list_cat:
 
         for j in list_cat:
-            if len(dict_num[j]['items']) == 0:
-                continue
-            else:
-                for i in dict_num[j]['items']:
-                    if i['phone'] not in list_num:
-                        list_num.append(i['phone'])
-                        await message.answer(f"{i['phone']}")
-                        await asyncio.sleep(1)
-                    else:
-                        continue
+            async for dict_num in url_page(tarif_phone, maska_phone, j):
+                if len(dict_num[j]['items']) == 0:
+                    continue
+                else:
+                    for i in dict_num[j]['items']:
+                        if i['phone'] not in list_num:
+                            list_num.append(i['phone'])
+                            await message.answer(f"{i['phone']}")
+                            await asyncio.sleep(1)
+                        else:
+                            continue
 
-    if cat_phone in list_cat:
-        for i in dict_num[cat_phone]['items']:
-            if i['phone'] not in list_num:
-                list_num.append(i['phone'])
-                await message.answer(f"{i['phone']}")
-                await asyncio.sleep(1)
-            else:
-                continue
+    elif cat_phone in list_cat:
+        async for dict_num in url_page(tarif_phone, maska_phone, cat_phone):
+            for i in dict_num[cat_phone]['items']:
+                if i['phone'] not in list_num:
+                    list_num.append(i['phone'])
+                    await message.answer(f"{i['phone']}")
+                    await asyncio.sleep(1)
+                else:
+                    continue
