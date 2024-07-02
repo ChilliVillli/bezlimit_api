@@ -14,7 +14,6 @@ load_dotenv()
 
 async def starts():
 
-    # scheduler.start()
     bot = Bot(os.getenv('TOKEN'))
     dp = Dispatcher(fsm_strategy=FSMStrategy.USER_IN_CHAT)
     dp.include_router(router)
