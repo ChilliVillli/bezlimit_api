@@ -8,6 +8,8 @@ from aiogram.types import Message
 from keyboard import menu, tarif_num, cancel, cat, next
 from aiogram.fsm.context import FSMContext
 from loader import scheduler
+import aiohttp
+from asyncio_requests.asyncio_request import request
 
 
 list_num = []
@@ -26,8 +28,8 @@ dict_cat = {
     '': ''
 }
 headers = {'User-agent': ua.random}
-session = requests.Session()
-session.headers.update(headers)
+# session = requests.Session()
+# session.headers.update(headers)
 
 
 class FiltresSearch(StatesGroup):
@@ -109,21 +111,32 @@ async def url_page(maska_phone, tarif_phone, cat_phone):
     page = 0
     flag = True
 
-    while flag:
-        page += 1
+    async with aiohttp.ClientSession() as session:
 
-        res_num = await asyncio.to_thread(session.get,
-            f"https://api.store.bezlimit.ru/v2/super-link/phones/mask-category?mask-category={cat_phone}"
-            f"&phone_pattern={maska_phone}&service_limit={tarif_phone}&group_by=mask-category&page={page}&"
-            f"expand=tariff,region&per_page=50"
-        )
+        while flag:
 
-        dict_num = res_num.json()
+            page += 1
 
-        if dict_num[cat_phone]['_meta']['pageCount'] < page:
-            flag = False
+            # res_num = await asyncio.to_thread(session.get,
+            #     f"https://api.store.bezlimit.ru/v2/super-link/phones/mask-category?mask-category={cat_phone}"
+            #     f"&phone_pattern={maska_phone}&service_limit={tarif_phone}&group_by=mask-category&page={page}&"
+            #     f"expand=tariff,region&per_page=50"
+            # )
+            # dict_num = res_num.json()
 
-        yield dict_num
+            async with session.get(f"https://api.store.bezlimit.ru/v2/super-link/phones/mask-category?mask-category={cat_phone}&"
+                                   f"phone_pattern={maska_phone}&service_limit={tarif_phone}&group_by=mask-category&page={page}&"
+                                   f"expand=tariff,region&per_page=50") as resp:
+
+                dict_num = await resp.json()
+                count = dict_num[cat_phone]['_meta']['pageCount']
+
+            print(page)
+
+            if count < page:
+                flag = False
+
+            yield dict_num
 
 
 async def base_set(message, tarif_phone, maska_phone, cat_phone, list_cat):
