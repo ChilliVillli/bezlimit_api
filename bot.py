@@ -1,7 +1,7 @@
 import asyncio
+import random
 from aiogram import Router, F
 from aiogram.fsm.state import StatesGroup, State
-import requests
 from fake_useragent import UserAgent
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
@@ -9,7 +9,6 @@ from keyboard import menu, tarif_num, cancel, cat, next
 from aiogram.fsm.context import FSMContext
 from loader import scheduler
 import aiohttp
-from asyncio_requests.asyncio_request import request
 
 
 list_num = []
@@ -28,8 +27,6 @@ dict_cat = {
     '': ''
 }
 headers = {'User-agent': ua.random}
-# session = requests.Session()
-# session.headers.update(headers)
 
 
 class FiltresSearch(StatesGroup):
@@ -108,6 +105,7 @@ async def cat_num(message: Message, state: FSMContext):
 
 
 async def url_page(maska_phone, tarif_phone, cat_phone):
+
     page = 0
     flag = True
 
@@ -124,16 +122,22 @@ async def url_page(maska_phone, tarif_phone, cat_phone):
             # )
             # dict_num = res_num.json()
 
+            await asyncio.sleep(random.randint(3, 6))
+
             async with session.get(f"https://api.store.bezlimit.ru/v2/super-link/phones/mask-category?mask-category={cat_phone}&"
                                    f"phone_pattern={maska_phone}&service_limit={tarif_phone}&group_by=mask-category&page={page}&"
-                                   f"expand=tariff,region&per_page=50") as resp:
+                                   f"expand=tariff,region&per_page=50", headers=headers) as resp:
 
                 dict_num = await resp.json()
-                count = dict_num[cat_phone]['_meta']['pageCount']
 
-            print(page)
+                try:
+                    count = dict_num[cat_phone]['_meta']['pageCount']
+                except KeyError:
+                    page -= 1
+                    await asyncio.sleep(2)
+                    continue
 
-            if count < page:
+            if count <= page:
                 flag = False
 
             yield dict_num
